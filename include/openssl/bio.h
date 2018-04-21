@@ -535,6 +535,8 @@ BIO *BIO_new(const BIO_METHOD *type);
 int BIO_free(BIO *a);
 void BIO_set_data(BIO *a, void *ptr);
 void *BIO_get_data(BIO *a);
+void BIO_set_num(BIO *a, int num);
+int BIO_get_num(BIO *a);
 void BIO_set_init(BIO *a, int init);
 int BIO_get_init(BIO *a);
 void BIO_set_shutdown(BIO *a, int shut);

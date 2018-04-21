@@ -90,6 +90,16 @@ void *BIO_get_data(BIO *a)
     return a->ptr;
 }
 
+void BIO_set_num(BIO *a, int num)
+{
+    a->num = num;
+}
+
+int BIO_get_num(BIO *a)
+{
+    return a->num;
+}
+
 void BIO_set_init(BIO *a, int init)
 {
     a->init = init;
