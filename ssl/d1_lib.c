@@ -16,9 +16,16 @@
 static void get_current_time(struct timeval *t);
 static int dtls1_handshake_write(SSL *s);
 static size_t dtls1_link_min_mtu(void);
+static void dtls1_set_initial_timeout_duration(SSL *s, unsigned int duration_ms);
 
 /* XDTLS:  figure out the right values */
 static const size_t g_probable_mtu[] = { 1500, 512, 256 };
+
+/*
+ * RFC 6347 states that implementations SHOULD use an initial timer value of
+ * 1 second.
+ */
+static const unsigned int default_initial_timeout_us = 1000000;
 
 const SSL3_ENC_METHOD DTLSv1_enc_data = {
     tls1_enc,
@@ -97,6 +104,7 @@ int dtls1_new(SSL *s)
         return 0;
     }
 
+    d1->initial_timeout_duration_us = default_initial_timeout_us;
     s->d1 = d1;
 
     if (!s->method->ssl_clear(s))
@@ -157,6 +165,7 @@ int dtls1_clear(SSL *s)
     pqueue *sent_messages;
     size_t mtu;
     size_t link_mtu;
+    unsigned int initial_timeout_duration_us;
 
     DTLS_RECORD_LAYER_clear(&s->rlayer);
 
@@ -167,6 +176,7 @@ int dtls1_clear(SSL *s)
         sent_messages = s->d1->sent_messages;
         mtu = s->d1->mtu;
         link_mtu = s->d1->link_mtu;
+        initial_timeout_duration_us = s->d1->initial_timeout_duration_us;
 
         dtls1_clear_queues(s);
 
@@ -186,6 +196,7 @@ int dtls1_clear(SSL *s)
 
         s->d1->buffered_messages = buffered_messages;
         s->d1->sent_messages = sent_messages;
+        s->d1->initial_timeout_duration_us = initial_timeout_duration_us;
     }
 
     if (!ssl3_clear(s))
@@ -232,6 +243,9 @@ long dtls1_ctrl(SSL *s, int cmd, long larg, void *parg)
             return 0;
         s->d1->mtu = larg;
         return larg;
+    case DTLS_CTRL_SET_TIMEOUT_DURATION:
+        dtls1_set_initial_timeout_duration(s, larg);
+        break;
     default:
         ret = ssl3_ctrl(s, cmd, larg, parg);
         break;
@@ -252,7 +266,7 @@ void dtls1_start_timer(SSL *s)
 #endif
 
     /*
-     * If timer is not set, initialize duration with 1 second or
+     * If timer is not set, initialize duration to set initial value or
      * a user-specified value if the timer callback is installed.
      */
     if (s->d1->next_timeout.tv_sec == 0 && s->d1->next_timeout.tv_usec == 0) {
@@ -260,7 +274,7 @@ void dtls1_start_timer(SSL *s)
         if (s->d1->timer_cb != NULL)
             s->d1->timeout_duration_us = s->d1->timer_cb(s, 0);
         else
-            s->d1->timeout_duration_us = 1000000;
+            s->d1->timeout_duration_us = s->d1->initial_timeout_duration_us;
     }
 
     /* Set timeout to current time */
@@ -281,6 +295,10 @@ void dtls1_start_timer(SSL *s)
 
     BIO_ctrl(SSL_get_rbio(s), BIO_CTRL_DGRAM_SET_NEXT_TIMEOUT, 0,
              &(s->d1->next_timeout));
+}
+
+void dtls1_set_initial_timeout_duration(SSL *s, unsigned int duration_ms) {
+  s->d1->initial_timeout_duration_us = duration_ms * 1000;
 }
 
 struct timeval *dtls1_get_timeout(SSL *s, struct timeval *timeleft)
@@ -354,7 +372,7 @@ void dtls1_stop_timer(SSL *s)
     /* Reset everything */
     memset(&s->d1->timeout, 0, sizeof(s->d1->timeout));
     memset(&s->d1->next_timeout, 0, sizeof(s->d1->next_timeout));
-    s->d1->timeout_duration_us = 1000000;
+    s->d1->timeout_duration_us = s->d1->initial_timeout_duration_us;
     BIO_ctrl(SSL_get_rbio(s), BIO_CTRL_DGRAM_SET_NEXT_TIMEOUT, 0,
              &(s->d1->next_timeout));
     /* Clear retransmission buffer */

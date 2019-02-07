@@ -1774,6 +1774,11 @@ typedef struct dtls1_state_st {
     size_t mtu;           /* max DTLS packet size */
     struct hm_header_st w_msg_hdr;
     struct hm_header_st r_msg_hdr;
+    /*
+     * initial_timeout_duration_us is the default DTLS timeout duration in
+     * microseconds. It's used to initialize the timer any time it's restarted
+     */
+    unsigned initial_timeout_duration_us;
     struct dtls1_timeout_st timeout;
     /*
      * Indicates when the last handshake msg sent will timeout
